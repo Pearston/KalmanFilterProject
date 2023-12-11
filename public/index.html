@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas Line Fading</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const mouse = { x: 0, y: 0 };
+    const maxDots = 1000; // Set your desired number of dots here
+    const trail = [];
+    const redDots = [];
+    let isMouseMoving = false;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    canvas.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      isMouseMoving = true;
+    });
+
+    function drawTrail() {
+      if (!isMouseMoving) return; // Stop drawing if mouse is not moving
+
+      trail.push({ x: mouse.x, y: mouse.y });
+
+      while (trail.length > maxDots) {
+        trail.shift();
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < trail.length; i++) {
+        const alpha = i / maxDots; // Alpha starts from 0
+        ctx.beginPath();
+        ctx.arc(trail[i].x, trail[i].y, 2, 0, Math.PI * 2, false);
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.8})`; // Adjust the multiplier to make it darker
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      socket.emit('trail', trail);
+
+      for (const redDot of redDots) {
+        drawRedDot(redDot.x, redDot.y);
+      }
+
+      socket.emit('redDots', redDots);
+    }
+
+    function drawRedDot(x, y) {
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2, false);
+      ctx.fillStyle = 'red';
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      drawTrail();
+      isMouseMoving = false; // Reset mouse movement flag
+    }
+
+    animate();
+
+    socket.on('trail', (data) => {
+      trail.length = 0;
+      trail.push(...data);
+    });
+
+    socket.on('redDots', (data) => {
+      redDots.length = 0;
+      redDots.push(...data);
+    });
+
+    function getGaussianRandom(min, max) {
+      const x = gaussianRandom() * (max - min) + min;
+      const y = gaussianRandom() * (max - min) + min;
+      return { x, y };
+    }
+
+    function gaussianRandom() {
+      let rand = 0;
+      for (let i = 0; i < 6; i += 1) {
+        rand += Math.random();
+      }
+      return rand / 6 - 0.5;
+    }
+
+    function generateRedDot() {
+      if (Math.random() < 0.3) { // Probability set to 0.3 (30% chance)
+        const randomDist = getGaussianRandom(10, 50); // Adjust the range here
+        const lastTrailIndex = trail.length - 1;
+        const redX = trail[lastTrailIndex].x + randomDist.x;
+        const redY = trail[lastTrailIndex].y + randomDist.y;
+        redDots.push({ x: redX, y: redY });
+        socket.emit('redDots', redDots);
+      }
+    }
+
+    // Delay in milliseconds before the red dots attempt to appear (e.g., 3000ms = 3 seconds)
+    const delayInSeconds = 3;
+    setInterval(generateRedDot, delayInSeconds * 1000); // Generate red dots every N seconds
+  </script>
+</body>
+</html>
